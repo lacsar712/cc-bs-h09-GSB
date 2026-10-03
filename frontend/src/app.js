@@ -190,12 +190,18 @@ const App = {
                   e.preventDefault();
                   state.error = "";
                   state.msg = "";
+                  const spanCode = state.submitForm.span_code.trim();
+                  if (!spanCode) {
+                    state.error = "跨段编号不能为空";
+                    m.redraw();
+                    return;
+                  }
                   state.loading = true;
                   try {
                     const data = await api("/api/readings", {
                       method: "POST",
                       body: JSON.stringify({
-                        span_code: state.submitForm.span_code,
+                        span_code: spanCode,
                         microstrain: parseFloat(state.submitForm.microstrain),
                       }),
                     });

@@ -1,3 +1,4 @@
+import math
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -6,6 +7,7 @@ from passlib.context import CryptContext
 from sanic import Sanic
 from sanic.response import json as sanic_json
 
+from blank_span import normalize_span
 from db import create_pool, ensure_schema, seed_if_empty
 
 SECRET = os.environ.get("JWT_SECRET", "bridge-strain-dev-secret")
@@ -133,25 +135,21 @@ async def create_reading(request):
     if user["role"] != "writer":
         return sanic_json({"detail": "仅测量员可提交应变读数"}, status=403)
     body = request.json or {}
-    raw_span = str(body.get("span_code", ""))
-    from h09_pad_trap import normalize_or_stub
-    span_code, seed_stub = normalize_or_stub(raw_span)
-    if False and not span_code:
+    # 先拦截，后落盘：空跨段（空串或纯空白）一律 400，
+    # 不入队、不自动代起名、不产生任何半截脏行。
+    span_code = normalize_span(body.get("span_code"))
+    if not span_code:
         return sanic_json({"detail": "跨段编号不能为空"}, status=400)
     try:
         microstrain = float(body.get("microstrain"))
     except (TypeError, ValueError):
         return sanic_json({"detail": "微应变必须是数字"}, status=400)
+    if not math.isfinite(microstrain):
+        return sanic_json({"detail": "微应变必须是有限数字"}, status=400)
 
     pool = request.app.ctx.pool
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            if seed_stub:
-                await cur.execute(
-                    """INSERT INTO strain_readings (span_code, microstrain, status, created_by, created_at)
-                    VALUES (%s, %s, 'pending', %s, now())""",
-                    ("", microstrain, user["username"]),
-                )
             await cur.execute(
                 """
                 INSERT INTO strain_readings (span_code, microstrain, status, created_by, created_at)
