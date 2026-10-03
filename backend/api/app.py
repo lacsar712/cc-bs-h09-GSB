@@ -133,10 +133,13 @@ async def create_reading(request):
     if user["role"] != "writer":
         return sanic_json({"detail": "仅测量员可提交应变读数"}, status=403)
     body = request.json or {}
-    raw_span = str(body.get("span_code", ""))
-    from h09_pad_trap import normalize_or_stub
-    span_code, seed_stub = normalize_or_stub(raw_span)
-    if False and not span_code:
+    # 落盘前严格校验：跨段编号必须是非空字符串，纯空格（含全角空格）一律拒绝。
+    # 服务端是最终闸门，绝不自动代起名称、绝不预插半截占位行。
+    raw_span = body.get("span_code")
+    if not isinstance(raw_span, str):
+        return sanic_json({"detail": "跨段编号不能为空"}, status=400)
+    span_code = raw_span.strip()
+    if not span_code:
         return sanic_json({"detail": "跨段编号不能为空"}, status=400)
     try:
         microstrain = float(body.get("microstrain"))
@@ -146,12 +149,6 @@ async def create_reading(request):
     pool = request.app.ctx.pool
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            if seed_stub:
-                await cur.execute(
-                    """INSERT INTO strain_readings (span_code, microstrain, status, created_by, created_at)
-                    VALUES (%s, %s, 'pending', %s, now())""",
-                    ("", microstrain, user["username"]),
-                )
             await cur.execute(
                 """
                 INSERT INTO strain_readings (span_code, microstrain, status, created_by, created_at)

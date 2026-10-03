@@ -190,13 +190,25 @@ const App = {
                   e.preventDefault();
                   state.error = "";
                   state.msg = "";
+                  const spanCode = state.submitForm.span_code.trim();
+                  if (!spanCode) {
+                    state.error = "跨段编号不能为空";
+                    m.redraw();
+                    return;
+                  }
+                  const microstrain = parseFloat(state.submitForm.microstrain);
+                  if (Number.isNaN(microstrain)) {
+                    state.error = "微应变必须是数字";
+                    m.redraw();
+                    return;
+                  }
                   state.loading = true;
                   try {
                     const data = await api("/api/readings", {
                       method: "POST",
                       body: JSON.stringify({
-                        span_code: state.submitForm.span_code,
-                        microstrain: parseFloat(state.submitForm.microstrain),
+                        span_code: spanCode,
+                        microstrain,
                       }),
                     });
                     state.msg = data.message || "已提交";
